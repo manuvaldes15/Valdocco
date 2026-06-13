@@ -1,0 +1,686 @@
+// ============================================================
+// VALDOCCO — Schema único PostgreSQL 16 (sin multitenancy)
+// Soft delete: fechaElim NULL = activo. Nunca DELETE físico.
+// ============================================================
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// BLOQUE 1: CONFIGURACIÓN
+// ─────────────────────────────────────────────
+
+model Configuracion {
+  id                Int      @id @default(autoincrement())
+  nombreInstitucion String   @map("nombre_institucion") @db.VarChar(200)
+  direccion         String?
+  telefono          String?  @db.VarChar(20)
+  email             String?  @db.VarChar(200)
+  logoUrl           String?  @map("logo_url")
+  turnoManana       Boolean  @default(true) @map("turno_manana")
+  turnoTarde        Boolean  @default(false) @map("turno_tarde")
+  fechaCrea         DateTime @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod          DateTime @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  userCrea          String?  @map("user_crea") @db.Uuid
+  userMod           String?  @map("user_mod") @db.Uuid
+
+  @@map("configuracion")
+}
+
+// ─────────────────────────────────────────────
+// BLOQUE 2: PERSONAS Y USUARIOS
+// ─────────────────────────────────────────────
+
+model Persona {
+  id              String    @id @default(uuid()) @db.Uuid
+  primerNombre    String    @map("primer_nombre") @db.VarChar(100)
+  segundoNombre   String?   @map("segundo_nombre") @db.VarChar(100)
+  primerApellido  String    @map("primer_apellido") @db.VarChar(100)
+  segundoApellido String?   @map("segundo_apellido") @db.VarChar(100)
+  fechaNacimiento DateTime? @map("fecha_nacimiento") @db.Date
+  genero          String?   @db.VarChar(10)
+  dui             String?   @db.VarChar(20)
+  email           String?   @db.VarChar(200)
+  telefono        String?   @db.VarChar(20)
+  telefonoAlt     String?   @map("telefono_alt") @db.VarChar(20)
+  direccion       String?
+  profesion       String?   @db.VarChar(200)
+  fotoUrl         String?   @map("foto_url")
+  nacionalidad    String?   @db.VarChar(100)
+  fechaCrea       DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod        DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim       DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea        String?   @map("user_crea") @db.Uuid
+  userMod         String?   @map("user_mod") @db.Uuid
+  userElim        String?   @map("user_elim") @db.Uuid
+
+  usuario     Usuario?
+  alumno      Alumno?
+  responsable Responsable?
+  maestro     Maestro?
+
+  @@map("personas")
+}
+
+model Usuario {
+  id               String    @id @default(uuid()) @db.Uuid
+  personaId        String    @unique @map("persona_id") @db.Uuid
+  nombreUsuario    String    @unique @map("nombre_usuario") @db.VarChar(100)
+  email            String    @unique @db.VarChar(200)
+  contrasenaHash   String    @map("contrasena_hash")
+  rol              String    @db.VarChar(20)
+  activo           Boolean   @default(true)
+  ultimoAcceso     DateTime? @map("ultimo_acceso") @db.Timestamptz
+  refreshTokenHash String?   @map("refresh_token_hash")
+  fechaCrea        DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod         DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim        DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea         String?   @map("user_crea") @db.Uuid
+  userMod          String?   @map("user_mod") @db.Uuid
+  userElim         String?   @map("user_elim") @db.Uuid
+
+  persona            Persona            @relation(fields: [personaId], references: [id])
+  eventosCalendario  EventoCalendario[]
+  anuncios           Anuncio[]
+
+  @@map("usuarios")
+}
+
+model Alumno {
+  id                          String    @id @default(uuid()) @db.Uuid
+  personaId                   String    @unique @map("persona_id") @db.Uuid
+  codigoAlumno                String?   @unique @map("codigo_alumno") @db.VarChar(30)
+  tipoSangre                  String?   @map("tipo_sangre") @db.VarChar(5)
+  alergias                    String?
+  condicionesMedicas          String?   @map("condiciones_medicas")
+  necesidadesEspeciales       String?   @map("necesidades_especiales")
+  nombreContactoEmergencia    String?   @map("nombre_contacto_emergencia") @db.VarChar(200)
+  telefonoContactoEmergencia  String?   @map("telefono_contacto_emergencia") @db.VarChar(20)
+  fechaCrea                   DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod                    DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim                   DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea                    String?   @map("user_crea") @db.Uuid
+  userMod                     String?   @map("user_mod") @db.Uuid
+  userElim                    String?   @map("user_elim") @db.Uuid
+
+  persona          Persona             @relation(fields: [personaId], references: [id])
+  responsables     AlumnoResponsable[]
+  inscripciones    Inscripcion[]
+  notasActividades NotaActividad[]
+  fichasAtencion   FichaAtencion[]
+  cuadrosHonor     CuadroHonor[]
+  promociones      Promocion[]
+
+  @@map("alumnos")
+}
+
+model Responsable {
+  id           String    @id @default(uuid()) @db.Uuid
+  personaId    String    @unique @map("persona_id") @db.Uuid
+  tipoRelacion String?   @map("tipo_relacion") @db.VarChar(20)
+  fechaCrea    DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod     DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim    DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea     String?   @map("user_crea") @db.Uuid
+  userMod      String?   @map("user_mod") @db.Uuid
+  userElim     String?   @map("user_elim") @db.Uuid
+
+  persona Persona             @relation(fields: [personaId], references: [id])
+  alumnos AlumnoResponsable[]
+
+  @@map("responsables")
+}
+
+model AlumnoResponsable {
+  id            String    @id @default(uuid()) @db.Uuid
+  alumnoId      String    @map("alumno_id") @db.Uuid
+  responsableId String    @map("responsable_id") @db.Uuid
+  esPrincipal   Boolean   @default(false) @map("es_principal")
+  puedeRecoger  Boolean   @default(true) @map("puede_recoger")
+  fechaCrea     DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod      DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim     DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea      String?   @map("user_crea") @db.Uuid
+  userMod       String?   @map("user_mod") @db.Uuid
+  userElim      String?   @map("user_elim") @db.Uuid
+
+  alumno      Alumno      @relation(fields: [alumnoId], references: [id])
+  responsable Responsable @relation(fields: [responsableId], references: [id])
+
+  @@unique([alumnoId, responsableId])
+  @@map("alumno_responsables")
+}
+
+model Maestro {
+  id                String    @id @default(uuid()) @db.Uuid
+  personaId         String    @unique @map("persona_id") @db.Uuid
+  codigoMaestro     String?   @map("codigo_maestro") @db.VarChar(30)
+  especializacion   String?   @db.VarChar(200)
+  fechaContratacion DateTime? @map("fecha_contratacion") @db.Date
+  tipoContrato      String?   @map("tipo_contrato") @db.VarChar(20)
+  fechaCrea         DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod          DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim         DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea          String?   @map("user_crea") @db.Uuid
+  userMod           String?   @map("user_mod") @db.Uuid
+  userElim          String?   @map("user_elim") @db.Uuid
+
+  persona           Persona            @relation(fields: [personaId], references: [id])
+  seccionMaterias   SeccionMateria[]
+  inscripcionesGuia Inscripcion[]
+  horariosLaborales HorarioLaboral[]
+  horariosClases    HorarioClase[]
+  fichasAtencion    FichaAtencion[]
+
+  @@map("maestros")
+}
+
+// ─────────────────────────────────────────────
+// BLOQUE 3: ESTRUCTURA ACADÉMICA
+// ─────────────────────────────────────────────
+
+model AnioLectivo {
+  id          String    @id @default(uuid()) @db.Uuid
+  nombre      String    @db.VarChar(20)
+  fechaInicio DateTime  @map("fecha_inicio") @db.Date
+  fechaFin    DateTime  @map("fecha_fin") @db.Date
+  activo      Boolean   @default(false)
+  fechaCrea   DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod    DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim   DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea    String?   @map("user_crea") @db.Uuid
+  userMod     String?   @map("user_mod") @db.Uuid
+  userElim    String?   @map("user_elim") @db.Uuid
+
+  seccionMaterias    SeccionMateria[]
+  inscripciones      Inscripcion[]
+  horariosLaborales  HorarioLaboral[]
+  horariosClases     HorarioClase[]
+  periodosEvaluacion PeriodoEvaluacion[]
+  cuadrosHonor       CuadroHonor[]
+  promociones        Promocion[]
+
+  @@map("anios_lectivos")
+}
+
+model NivelAcademico {
+  id        String   @id @default(uuid()) @db.Uuid
+  nombre    String   @db.VarChar(100)
+  orden     Int
+  fechaCrea DateTime @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod  DateTime @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  userCrea  String?  @map("user_crea") @db.Uuid
+  userMod   String?  @map("user_mod") @db.Uuid
+
+  ciclos Ciclo[]
+
+  @@map("niveles_academicos")
+}
+
+model Ciclo {
+  id        String   @id @default(uuid()) @db.Uuid
+  nivelId   String   @map("nivel_id") @db.Uuid
+  nombre    String   @db.VarChar(100)
+  orden     Int
+  fechaCrea DateTime @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod  DateTime @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  userCrea  String?  @map("user_crea") @db.Uuid
+  userMod   String?  @map("user_mod") @db.Uuid
+
+  nivel  NivelAcademico @relation(fields: [nivelId], references: [id])
+  grados Grado[]
+
+  @@map("ciclos")
+}
+
+model Grado {
+  id                String   @id @default(uuid()) @db.Uuid
+  cicloId           String   @map("ciclo_id") @db.Uuid
+  nombre            String   @db.VarChar(100)
+  orden             Int
+  sistemaEvaluacion String   @map("sistema_evaluacion") @db.VarChar(15)
+  fechaCrea         DateTime @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod          DateTime @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  userCrea          String?  @map("user_crea") @db.Uuid
+  userMod           String?  @map("user_mod") @db.Uuid
+
+  ciclo              Ciclo               @relation(fields: [cicloId], references: [id])
+  secciones          Seccion[]
+  periodosEvaluacion PeriodoEvaluacion[]
+  actividadesDestino Actividad[]
+  eventosDestino     EventoCalendario[]
+  anunciosDestino    Anuncio[]
+  promociones        Promocion[]
+
+  @@map("grados")
+}
+
+model Seccion {
+  id                   String    @id @default(uuid()) @db.Uuid
+  gradoId              String    @map("grado_id") @db.Uuid
+  nombre               String    @db.VarChar(10)
+  turno                String    @db.VarChar(10)
+  notaMinimaAprobacion Decimal   @default(5.0) @map("nota_minima_aprobacion") @db.Decimal(4, 2)
+  capacidad            Int       @default(35)
+  fechaCrea            DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod             DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim            DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea             String?   @map("user_crea") @db.Uuid
+  userMod              String?   @map("user_mod") @db.Uuid
+  userElim             String?   @map("user_elim") @db.Uuid
+
+  grado           Grado            @relation(fields: [gradoId], references: [id])
+  seccionMaterias SeccionMateria[]
+  inscripciones   Inscripcion[]
+
+  @@map("secciones")
+}
+
+model Materia {
+  id          String    @id @default(uuid()) @db.Uuid
+  nombre      String    @db.VarChar(200)
+  codigo      String?   @db.VarChar(20)
+  colorHex    String?   @map("color_hex") @db.VarChar(7)
+  descripcion String?
+  fechaCrea   DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod    DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim   DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea    String?   @map("user_crea") @db.Uuid
+  userMod     String?   @map("user_mod") @db.Uuid
+  userElim    String?   @map("user_elim") @db.Uuid
+
+  seccionMaterias SeccionMateria[]
+
+  @@map("materias")
+}
+
+model SeccionMateria {
+  id             String    @id @default(uuid()) @db.Uuid
+  seccionId      String    @map("seccion_id") @db.Uuid
+  materiaId      String    @map("materia_id") @db.Uuid
+  maestroId      String    @map("maestro_id") @db.Uuid
+  anioLectivoId  String    @map("anio_lectivo_id") @db.Uuid
+  horasSemanales Decimal?  @map("horas_semanales") @db.Decimal(4, 1)
+  fechaCrea      DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod       DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim      DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea       String?   @map("user_crea") @db.Uuid
+  userMod        String?   @map("user_mod") @db.Uuid
+  userElim       String?   @map("user_elim") @db.Uuid
+
+  seccion        Seccion        @relation(fields: [seccionId], references: [id])
+  materia        Materia        @relation(fields: [materiaId], references: [id])
+  maestro        Maestro        @relation(fields: [maestroId], references: [id])
+  anioLectivo    AnioLectivo    @relation(fields: [anioLectivoId], references: [id])
+  actividades    Actividad[]
+  horariosClases HorarioClase[]
+
+  @@unique([seccionId, materiaId, anioLectivoId])
+  @@map("seccion_materias")
+}
+
+// ─────────────────────────────────────────────
+// BLOQUE 4: INSCRIPCIONES
+// ─────────────────────────────────────────────
+
+model Inscripcion {
+  id               String    @id @default(uuid()) @db.Uuid
+  alumnoId         String    @map("alumno_id") @db.Uuid
+  seccionId        String    @map("seccion_id") @db.Uuid
+  anioLectivoId    String    @map("anio_lectivo_id") @db.Uuid
+  maestroGuiaId    String    @map("maestro_guia_id") @db.Uuid
+  fechaInscripcion DateTime  @map("fecha_inscripcion") @db.Date
+  estado           String    @default("ACTIVO") @db.VarChar(20)
+  fechaRetiro      DateTime? @map("fecha_retiro") @db.Date
+  motivoRetiro     String?   @map("motivo_retiro")
+  turnoTraslado    String?   @map("turno_traslado") @db.VarChar(10)
+  fechaTraslado    DateTime? @map("fecha_traslado") @db.Date
+  fechaCrea        DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod         DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim        DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea         String?   @map("user_crea") @db.Uuid
+  userMod          String?   @map("user_mod") @db.Uuid
+  userElim         String?   @map("user_elim") @db.Uuid
+
+  alumno      Alumno      @relation(fields: [alumnoId], references: [id])
+  seccion     Seccion     @relation(fields: [seccionId], references: [id])
+  anioLectivo AnioLectivo @relation(fields: [anioLectivoId], references: [id])
+  maestroGuia Maestro     @relation(fields: [maestroGuiaId], references: [id])
+
+  @@index([alumnoId, anioLectivoId, estado])
+  @@map("inscripciones")
+}
+
+// ─────────────────────────────────────────────
+// BLOQUE 5: HORARIOS Y AULAS
+// ─────────────────────────────────────────────
+
+model Aula {
+  id          String    @id @default(uuid()) @db.Uuid
+  nombre      String    @db.VarChar(50)
+  capacidad   Int?
+  edificio    String?   @db.VarChar(100)
+  turnoManana Boolean   @default(true) @map("turno_manana")
+  turnoTarde  Boolean   @default(false) @map("turno_tarde")
+  fechaCrea   DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod    DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim   DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea    String?   @map("user_crea") @db.Uuid
+  userMod     String?   @map("user_mod") @db.Uuid
+  userElim    String?   @map("user_elim") @db.Uuid
+
+  horariosClases HorarioClase[]
+
+  @@map("aulas")
+}
+
+model HorarioLaboral {
+  id            String    @id @default(uuid()) @db.Uuid
+  maestroId     String    @map("maestro_id") @db.Uuid
+  anioLectivoId String    @map("anio_lectivo_id") @db.Uuid
+  diaSemana     Int       @map("dia_semana")
+  horaEntrada   DateTime  @map("hora_entrada") @db.Time
+  horaSalida    DateTime  @map("hora_salida") @db.Time
+  turno         String?   @db.VarChar(10)
+  fechaCrea     DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod      DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim     DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea      String?   @map("user_crea") @db.Uuid
+  userMod       String?   @map("user_mod") @db.Uuid
+  userElim      String?   @map("user_elim") @db.Uuid
+
+  maestro     Maestro     @relation(fields: [maestroId], references: [id])
+  anioLectivo AnioLectivo @relation(fields: [anioLectivoId], references: [id])
+
+  @@map("horarios_laborales")
+}
+
+model HorarioClase {
+  id               String    @id @default(uuid()) @db.Uuid
+  maestroId        String    @map("maestro_id") @db.Uuid
+  seccionMateriaId String    @map("seccion_materia_id") @db.Uuid
+  aulaId           String    @map("aula_id") @db.Uuid
+  anioLectivoId    String    @map("anio_lectivo_id") @db.Uuid
+  diaSemana        Int       @map("dia_semana")
+  horaInicio       DateTime  @map("hora_inicio") @db.Time
+  horaFin          DateTime  @map("hora_fin") @db.Time
+  fechaCrea        DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod         DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim        DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea         String?   @map("user_crea") @db.Uuid
+  userMod          String?   @map("user_mod") @db.Uuid
+  userElim         String?   @map("user_elim") @db.Uuid
+
+  maestro        Maestro        @relation(fields: [maestroId], references: [id])
+  seccionMateria SeccionMateria @relation(fields: [seccionMateriaId], references: [id])
+  aula           Aula           @relation(fields: [aulaId], references: [id])
+  anioLectivo    AnioLectivo    @relation(fields: [anioLectivoId], references: [id])
+
+  @@index([anioLectivoId, diaSemana, maestroId])
+  @@index([anioLectivoId, diaSemana, aulaId])
+  @@map("horarios_clases")
+}
+
+// ─────────────────────────────────────────────
+// BLOQUE 6: EVALUACIONES Y CALIFICACIONES
+// ─────────────────────────────────────────────
+
+model PeriodoEvaluacion {
+  id            String    @id @default(uuid()) @db.Uuid
+  anioLectivoId String    @map("anio_lectivo_id") @db.Uuid
+  gradoId       String    @map("grado_id") @db.Uuid
+  nombre        String    @db.VarChar(100)
+  numeroPeriodo Int       @map("numero_periodo")
+  fechaInicio   DateTime  @map("fecha_inicio") @db.Date
+  fechaFin      DateTime  @map("fecha_fin") @db.Date
+  fechaCrea     DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod      DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim     DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea      String?   @map("user_crea") @db.Uuid
+  userMod       String?   @map("user_mod") @db.Uuid
+  userElim      String?   @map("user_elim") @db.Uuid
+
+  anioLectivo  AnioLectivo   @relation(fields: [anioLectivoId], references: [id])
+  grado        Grado         @relation(fields: [gradoId], references: [id])
+  actividades  Actividad[]
+  cuadrosHonor CuadroHonor[]
+
+  @@unique([anioLectivoId, gradoId, numeroPeriodo])
+  @@map("periodos_evaluacion")
+}
+
+model Actividad {
+  id                  String    @id @default(uuid()) @db.Uuid
+  seccionMateriaId    String    @map("seccion_materia_id") @db.Uuid
+  periodoEvaluacionId String    @map("periodo_evaluacion_id") @db.Uuid
+  titulo              String    @db.VarChar(200)
+  descripcion         String?
+  tipo                String    @db.VarChar(20)
+  porcentajePeso      Decimal   @map("porcentaje_peso") @db.Decimal(5, 2)
+  notaMaxima          Decimal   @default(10) @map("nota_maxima") @db.Decimal(5, 2)
+  fechaEntrega        DateTime? @map("fecha_entrega") @db.Date
+  esGeneral           Boolean   @default(false) @map("es_general")
+  gradoDestinoId      String?   @map("grado_destino_id") @db.Uuid
+  fechaCrea           DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod            DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim           DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea            String?   @map("user_crea") @db.Uuid
+  userMod             String?   @map("user_mod") @db.Uuid
+  userElim            String?   @map("user_elim") @db.Uuid
+
+  seccionMateria    SeccionMateria    @relation(fields: [seccionMateriaId], references: [id])
+  periodoEvaluacion PeriodoEvaluacion @relation(fields: [periodoEvaluacionId], references: [id])
+  gradoDestino      Grado?            @relation(fields: [gradoDestinoId], references: [id])
+  notas             NotaActividad[]
+
+  @@map("actividades")
+}
+
+model NotaActividad {
+  id           String    @id @default(uuid()) @db.Uuid
+  actividadId  String    @map("actividad_id") @db.Uuid
+  alumnoId     String    @map("alumno_id") @db.Uuid
+  notaObtenida Decimal?  @map("nota_obtenida") @db.Decimal(5, 2)
+  estado       String    @default("PENDIENTE") @db.VarChar(20)
+  fechaEntrega DateTime? @map("fecha_entrega") @db.Timestamptz
+  comentario   String?
+  fechaCrea    DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod     DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim    DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea     String?   @map("user_crea") @db.Uuid
+  userMod      String?   @map("user_mod") @db.Uuid
+  userElim     String?   @map("user_elim") @db.Uuid
+
+  actividad Actividad @relation(fields: [actividadId], references: [id])
+  alumno    Alumno    @relation(fields: [alumnoId], references: [id])
+
+  @@unique([actividadId, alumnoId])
+  @@map("notas_actividades")
+}
+
+// ─────────────────────────────────────────────
+// BLOQUE 7: FICHAS DE ATENCIÓN
+// ─────────────────────────────────────────────
+
+model FichaAtencion {
+  id                 String    @id @default(uuid()) @db.Uuid
+  alumnoId           String    @map("alumno_id") @db.Uuid
+  maestroId          String    @map("maestro_id") @db.Uuid
+  titulo             String    @db.VarChar(200)
+  descripcion        String
+  gravedad           String    @db.VarChar(10)
+  fechaEmision       DateTime  @map("fecha_emision") @db.Date
+  notificadoEn       DateTime? @map("notificado_en") @db.Timestamptz
+  acuseResponsableEn DateTime? @map("acuse_responsable_en") @db.Timestamptz
+  estado             String    @default("ABIERTA") @db.VarChar(20)
+  fechaCrea          DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod           DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim          DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea           String?   @map("user_crea") @db.Uuid
+  userMod            String?   @map("user_mod") @db.Uuid
+  userElim           String?   @map("user_elim") @db.Uuid
+
+  alumno  Alumno  @relation(fields: [alumnoId], references: [id])
+  maestro Maestro @relation(fields: [maestroId], references: [id])
+
+  @@map("fichas_atencion")
+}
+
+// ─────────────────────────────────────────────
+// BLOQUE 8: CALENDARIO Y ANUNCIOS
+// ─────────────────────────────────────────────
+
+model EventoCalendario {
+  id             String    @id @default(uuid()) @db.Uuid
+  titulo         String    @db.VarChar(200)
+  descripcion    String?
+  fechaInicio    DateTime  @map("fecha_inicio") @db.Date
+  fechaFin       DateTime  @map("fecha_fin") @db.Date
+  horaInicio     DateTime? @map("hora_inicio") @db.Time
+  horaFin        DateTime? @map("hora_fin") @db.Time
+  tipoEvento     String?   @map("tipo_evento") @db.VarChar(20)
+  publicoDestino String?   @map("publico_destino") @db.VarChar(20)
+  gradoDestinoId String?   @map("grado_destino_id") @db.Uuid
+  creadoPorId    String?   @map("creado_por_id") @db.Uuid
+  fechaCrea      DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod       DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim      DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea       String?   @map("user_crea") @db.Uuid
+  userMod        String?   @map("user_mod") @db.Uuid
+  userElim       String?   @map("user_elim") @db.Uuid
+
+  gradoDestino Grado?   @relation(fields: [gradoDestinoId], references: [id])
+  creadoPor    Usuario? @relation(fields: [creadoPorId], references: [id])
+
+  @@map("eventos_calendario")
+}
+
+model Anuncio {
+  id             String    @id @default(uuid()) @db.Uuid
+  titulo         String    @db.VarChar(200)
+  contenido      String
+  autorId        String    @map("autor_id") @db.Uuid
+  publicoDestino String?   @map("publico_destino") @db.VarChar(20)
+  gradoDestinoId String?   @map("grado_destino_id") @db.Uuid
+  esDestacado    Boolean   @default(false) @map("es_destacado")
+  publicadoEn    DateTime? @map("publicado_en") @db.Timestamptz
+  expiraEn       DateTime? @map("expira_en") @db.Timestamptz
+  fechaCrea      DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod       DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim      DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea       String?   @map("user_crea") @db.Uuid
+  userMod        String?   @map("user_mod") @db.Uuid
+  userElim       String?   @map("user_elim") @db.Uuid
+
+  autor        Usuario @relation(fields: [autorId], references: [id])
+  gradoDestino Grado?  @relation(fields: [gradoDestinoId], references: [id])
+
+  @@map("anuncios")
+}
+
+// Catálogo de actividades institucionales recurrentes
+// (ej. "Hora Santa" todos los jueves, "Oratorio Festivo" los sábados)
+model ActividadRecurrente {
+  id             String    @id @default(uuid()) @db.Uuid
+  nombre         String    @db.VarChar(200)
+  descripcion    String?
+  diaSemana      Int       @map("dia_semana") // 1=Lunes ... 7=Domingo
+  horaInicio     DateTime? @map("hora_inicio") @db.Time
+  horaFin        DateTime? @map("hora_fin") @db.Time
+  colorHex       String?   @map("color_hex") @db.VarChar(7)
+  publicoDestino String?   @map("publico_destino") @db.VarChar(20)
+  fechaCrea      DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod       DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  fechaElim      DateTime? @map("fecha_elim") @db.Timestamptz
+  userCrea       String?   @map("user_crea") @db.Uuid
+  userMod        String?   @map("user_mod") @db.Uuid
+  userElim       String?   @map("user_elim") @db.Uuid
+
+  @@map("actividades_recurrentes")
+}
+
+// ─────────────────────────────────────────────
+// BLOQUE 9: CUADRO DE HONOR Y PROMOCIONES
+// ─────────────────────────────────────────────
+
+model CuadroHonor {
+  id                  String   @id @default(uuid()) @db.Uuid
+  anioLectivoId       String   @map("anio_lectivo_id") @db.Uuid
+  periodoEvaluacionId String   @map("periodo_evaluacion_id") @db.Uuid
+  alumnoId            String   @map("alumno_id") @db.Uuid
+  posicion            Int
+  promedioGeneral     Decimal  @map("promedio_general") @db.Decimal(5, 2)
+  otorgadoEn          DateTime @default(now()) @map("otorgado_en") @db.Timestamptz
+  fechaCrea           DateTime @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod            DateTime @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  userCrea            String?  @map("user_crea") @db.Uuid
+  userMod             String?  @map("user_mod") @db.Uuid
+
+  anioLectivo       AnioLectivo       @relation(fields: [anioLectivoId], references: [id])
+  periodoEvaluacion PeriodoEvaluacion @relation(fields: [periodoEvaluacionId], references: [id])
+  alumno            Alumno            @relation(fields: [alumnoId], references: [id])
+
+  @@map("cuadro_honor")
+}
+
+model Promocion {
+  id             String    @id @default(uuid()) @db.Uuid
+  anioLectivoId  String    @map("anio_lectivo_id") @db.Uuid
+  alumnoId       String    @map("alumno_id") @db.Uuid
+  gradoId        String    @map("grado_id") @db.Uuid
+  fechaCeremonia DateTime? @map("fecha_ceremonia") @db.Date
+  notas          String?
+  fechaCrea      DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+  fechaMod       DateTime  @default(now()) @updatedAt @map("fecha_mod") @db.Timestamptz
+  userCrea       String?   @map("user_crea") @db.Uuid
+  userMod        String?   @map("user_mod") @db.Uuid
+
+  anioLectivo AnioLectivo @relation(fields: [anioLectivoId], references: [id])
+  alumno      Alumno      @relation(fields: [alumnoId], references: [id])
+  grado       Grado       @relation(fields: [gradoId], references: [id])
+
+  @@map("promociones")
+}
+
+// ─────────────────────────────────────────────
+// BLOQUE 10: AUDITORÍA CENTRAL (solo INSERT, inmutable)
+// ─────────────────────────────────────────────
+
+model RegistroAuditoria {
+  id                String   @id @default(uuid()) @db.Uuid
+  usuarioId         String   @map("usuario_id") @db.Uuid
+  nombreTabla       String   @map("nombre_tabla") @db.VarChar(100)
+  idRegistro        String   @map("id_registro") @db.Uuid
+  accion            String   @db.VarChar(10)
+  valoresAnteriores Json?    @map("valores_anteriores")
+  valoresNuevos     Json?    @map("valores_nuevos")
+  fechaCrea         DateTime @default(now()) @map("fecha_crea") @db.Timestamptz
+
+  @@index([nombreTabla, idRegistro])
+  @@map("registros_auditoria")
+}
+
+// ─────────────────────────────────────────────
+// NOTIFICACIONES (bandeja persistida por el consumer de Redis)
+// ─────────────────────────────────────────────
+
+model Notificacion {
+  id           String    @id @default(uuid()) @db.Uuid
+  personaId    String    @map("persona_id") @db.Uuid
+  tipo         String    @db.VarChar(30)
+  titulo       String    @db.VarChar(200)
+  mensaje      String
+  referenciaId String?   @map("referencia_id") @db.Uuid
+  leidaEn      DateTime? @map("leida_en") @db.Timestamptz
+  fechaCrea    DateTime  @default(now()) @map("fecha_crea") @db.Timestamptz
+
+  @@index([personaId, leidaEn])
+  @@map("notificaciones")
+}

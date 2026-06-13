@@ -1,0 +1,35 @@
+# ============================================================
+# Imagen única para todos los microservicios backend de Valdocco.
+# Cada servicio en docker-compose ejecuta su propio dist:
+#   command: node apps/<servicio>/dist/index.js
+# ============================================================
+FROM node:22-alpine
+
+# Prisma necesita openssl para detectar el engine correcto (linux-musl-openssl-3.0.x)
+RUN apk add --no-cache openssl
+
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+
+WORKDIR /repo
+
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
+COPY packages ./packages
+COPY apps/gateway ./apps/gateway
+COPY apps/auth-service ./apps/auth-service
+COPY apps/personas-service ./apps/personas-service
+COPY apps/academico-service ./apps/academico-service
+COPY apps/inscripciones-service ./apps/inscripciones-service
+COPY apps/calificaciones-service ./apps/calificaciones-service
+COPY apps/horarios-service ./apps/horarios-service
+COPY apps/calendario-service ./apps/calendario-service
+COPY apps/notificaciones-service ./apps/notificaciones-service
+COPY apps/reportes-service ./apps/reportes-service
+
+RUN pnpm install --frozen-lockfile \
+  && pnpm --filter @valdocco/prisma-client generate \
+  && pnpm -r --filter './packages/*' --filter './apps/*' build
+
+# Ejecutar sin privilegios de root
+USER node
+
+CMD ["node", "apps/gateway/dist/index.js"]

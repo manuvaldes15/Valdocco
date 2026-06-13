@@ -1,0 +1,143 @@
+# ============================================================
+# VALDOCCO — Orquestación local (futuro: deploy en la nube)
+# Seguridad: solo web (3000) y gateway (4000) exponen puertos al host.
+# Postgres, Redis y los microservicios viven en la red interna.
+# ============================================================
+name: valdocco
+
+x-backend: &backend
+  image: valdocco/backend
+  build:
+    context: .
+    dockerfile: Dockerfile.backend
+  environment: &backend-env
+    NODE_ENV: production
+    DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+    REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    JWT_SECRET: ${JWT_SECRET}
+    JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+    INTERNAL_SECRET: ${INTERNAL_SECRET}
+    ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL}
+    REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS}
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_started
+    db-init:
+      condition: service_completed_successfully
+  networks: [interna]
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [interna]
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    networks: [interna]
+    restart: unless-stopped
+
+  # Crea las tablas y siembra datos iniciales; corre una sola vez
+  db-init:
+    image: valdocco/backend
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    working_dir: /repo/packages/prisma-client
+    command: >
+      sh -lc "npx prisma db push --skip-generate &&
+              npx ts-node --transpile-only prisma/seed.ts"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [interna]
+    restart: "no"
+
+  gateway:
+    <<: *backend
+    command: ["node", "apps/gateway/dist/index.js"]
+    environment:
+      <<: *backend-env
+      WEB_ORIGIN: http://localhost:3000
+      AUTH_SERVICE_URL: http://auth-service:4001
+      PERSONAS_SERVICE_URL: http://personas-service:4002
+      ACADEMICO_SERVICE_URL: http://academico-service:4003
+      INSCRIPCIONES_SERVICE_URL: http://inscripciones-service:4004
+      CALIFICACIONES_SERVICE_URL: http://calificaciones-service:4005
+      HORARIOS_SERVICE_URL: http://horarios-service:4006
+      CALENDARIO_SERVICE_URL: http://calendario-service:4007
+      NOTIFICACIONES_SERVICE_URL: http://notificaciones-service:4008
+      REPORTES_SERVICE_URL: http://reportes-service:4009
+    ports:
+      - "127.0.0.1:4000:4000"
+
+  auth-service:
+    <<: *backend
+    command: ["node", "apps/auth-service/dist/index.js"]
+
+  personas-service:
+    <<: *backend
+    command: ["node", "apps/personas-service/dist/index.js"]
+
+  academico-service:
+    <<: *backend
+    command: ["node", "apps/academico-service/dist/index.js"]
+
+  inscripciones-service:
+    <<: *backend
+    command: ["node", "apps/inscripciones-service/dist/index.js"]
+
+  calificaciones-service:
+    <<: *backend
+    command: ["node", "apps/calificaciones-service/dist/index.js"]
+
+  horarios-service:
+    <<: *backend
+    command: ["node", "apps/horarios-service/dist/index.js"]
+
+  calendario-service:
+    <<: *backend
+    command: ["node", "apps/calendario-service/dist/index.js"]
+
+  notificaciones-service:
+    <<: *backend
+    command: ["node", "apps/notificaciones-service/dist/index.js"]
+
+  reportes-service:
+    <<: *backend
+    command: ["node", "apps/reportes-service/dist/index.js"]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    depends_on:
+      - gateway
+    ports:
+      - "127.0.0.1:3000:80"
+    networks: [interna]
+    restart: unless-stopped
+
+networks:
+  interna:
+    driver: bridge
+
+volumes:
+  pgdata:
